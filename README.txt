@@ -1,0 +1,14 @@
+I have documented my code with detail.
+
+My ReceiveInterrupt() is responsible for updating the echo buffer and input buffer. This function basically updates the buffers one character at a time, and when special cases appear (such as \b or \n), it updates the two buffers accordingly. When done updating the buffers, if there is any character left in the echo buffer not dealt with and the WriteDataRegister() is not busy being called by some other procedures, only then will ReceiveInterrupt() kick start the very first WriteDataRegister(). One thing worth mentioning is that, whenever the input buffer get a newline character, ReceiveInterrupt() would signal() RT_input_buffer_lock to let ReadTerminal() starting reading from input buffer, regardless if there is any ReadTerminal() waiting. 
+
+TransmitInterrupt() is the function that mostly handles transmitting character to the terminal. When a first WriteDataRegister() is started by a ReceiveInterrupt() call or a WriteDataRegister() call, the TransmitInterrupt() will be called consecutively and repeatedly, until there is nothing to transmit to the terminal. A TransmitInterrupt() call can only do a WriteDataRegister() call a time. In TransmitInterrupt(), the echo buffer is always first examined since “echoing” has the highest priority. If there is any character not transmitted in the echo buffer (by checking the count of echo buffer), the TransmitInterrupt() will always transmit the stuff in echo buffer first. When echo buffer is empty, TransmitInterrupt() then examines the output buffer and starts transmitting characters there. Only when the count for both buffer is empty, the TransmitInterrupt() writes nothing and releases the WDR_lock and WT_writing_lock, letting other procedures that want to call WriteDataRegister() know that it is available now.  There is no waiting in neither interrupt functions, as specified by professor.
+
+ReadTerminal() first check if there are any preceding ReadTerminal() calls by checking RT_num. If there are, wait on RT_num_lock. After that, it checks if there is stuff to read from in the input buffer, if there is not, wait on RT_input_buffer_lock. When ReadTerminal() gains mutual exclusion, I used a for loop read the characters from input buffer. Finally, signal the RT_num lock. 
+
+For my WriteTerminal(), I used three condition variables: WT_num_lock to ensure there is only one WriteTerminal() being executed; WDR_lock to make sure echo buffer is always first dealt with; and WT_writing_lock to make sure the output buffer is emptied before a new WriteDataRegister() call. When WriteTerminal() gains mutual exclusion, I simply copy the buffer into output buffer, leaving it to be handled by TransmitInterrupt().
+
+test1-4 are mostly the same as sample given, but I changed added some backspace in test 4
+test0 opens up two terminals and do nothing
+test5 tests for 4 ReadTerminal calls
+test6 tests for multiple WriteTerminal calls on multiple terminals.
